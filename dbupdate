@@ -1,0 +1,40 @@
+#!/bin/bash
+
+SQLPATH=
+if [[ -d ${1} ]]; then
+ SQLPATH="${1}/"
+ shift
+fi
+
+DEMO=0
+if [ ${1} = "--demo" ]; then
+ DEMO=1
+ shift
+fi
+
+DB=${@: -1}
+
+VER=`mysql $@ -e "SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
+          IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
+             IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000', (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" | sed 's/ *$//'`
+
+VER=$(echo ${VER} | awk '{print $2}')
+
+if [ -z "${VER}" ]; then
+ VER="000"
+fi
+
+VER="`printf %03d $((${VER} + 1))`"
+
+FILE="${SQLPATH}UP_${VER}_Version_"
+for F in `ls "${FILE}"*`; do
+ mysql $@ < "${F}"
+ echo "Updated database '${DB}' to version ${VER}"
+done
+
+if [ ${DEMO} -eq 1 ]; then
+ DEMOFILE="${SQLPATH}DEMOPUT_${VER}.sql"
+ if [[ -f ${DEMOFILE} ]]; then
+  mysql $@ < "${DEMOFILE}"
+ fi
+fi
