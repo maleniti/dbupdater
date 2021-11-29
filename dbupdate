@@ -20,15 +20,22 @@ VER=`mysql $@ -e "SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SC
 
 VER=$(echo ${VER} | awk '{print $2}')
 
+NOVER=
 if [ -z "${VER}" ]; then
  VER="000"
+ NOVER=1
 fi
 
 VER="`printf %03d $((${VER} + 1))`"
 
 FILE="${SQLPATH}UP_${VER}_Version_"
 for F in `ls "${FILE}"*`; do
- mysql $@ < "${F}"
+ if [ -z "${NOVER}" ]; then
+  mysql $@ < "${F}"
+ else
+  mysql ${@:1:$#-1} < "${F}"
+  NOVER=
+ fi
  echo "Updated database '${DB}' to version ${VER}"
 done
 
