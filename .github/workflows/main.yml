@@ -10,7 +10,7 @@ jobs:
       - name: Build image
         run: |
           docker build . -t helloworldimage -f docker-action/Dockerfile
-          ocker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
+          docker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
       - name: Upload image
         uses: actions/upload-artifact@v2
         with:
