@@ -1,7 +1,7 @@
 on: [push]
 
 jobs:
-  build_and_scp:
+  build_image:
     runs-on: ubuntu-latest
     name: Image builder job
     steps:
@@ -11,12 +11,23 @@ jobs:
         run: |
           docker build . -t helloworldimage -f docker-action/Dockerfile
           ocker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
-      - name: SCP image
-        uses: appleboy/scp-action/.github/workflows/ci.yml@master
+      - name: Upload image
+        uses: actions/upload-artifact@v2
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          password: ${{ secrets.PASSWORD }}
-          source: "helloworldimage.tar.gz"
-          target: "helloworldimage"
+          name: helloworldimage
+          path: helloworldimage.tar.gz
+
+  scp_image:
+    name: SCP image
+    needs: build_image
+    runs-on: ubuntu-latest
+    uses: actions/download-artifact@v2
+    uses: appleboy/scp-action/.github/workflows/ci.yml@master
+    with:
+      name: helloworldimage
+      host: ${{ secrets.HOST }}
+      username: ${{ secrets.USERNAME }}
+      password: ${{ secrets.PASSWORD }}
+      source: "helloworldimage.tar.gz"
+      target: "helloworldimage"
     
