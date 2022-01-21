@@ -1,17 +1,22 @@
 on: [push]
 
 jobs:
-  build_image:
+  build_and_scp:
     runs-on: ubuntu-latest
-    uses: appleboy/scp-action/.github/workflows/ci.yml@master
     name: Image builder job
     steps:
-      - uses: actions/checkout@v2
-      - run: docker build . -t helloworldimage -f docker-action/Dockerfile 
-      - run: docker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
-    with:
-      host: ${{ secrets.HOST }}
-      username: ${{ secrets.USERNAME }}
-      password: ${{ secrets.PASSWORD }}
-      source: "helloworldimage.tar.gz"
-      target: "helloworldimage"
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Build image
+        run: |
+          docker build . -t helloworldimage -f docker-action/Dockerfile
+          ocker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
+      - name: SCP image
+        uses: appleboy/scp-action/.github/workflows/ci.yml@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          source: "helloworldimage.tar.gz"
+          target: "helloworldimage"
+    
