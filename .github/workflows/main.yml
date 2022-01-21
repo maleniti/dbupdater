@@ -6,6 +6,6 @@ jobs:
     name: Image builder job
     steps:
       - uses: actions/checkout@v2
-      - run: docker build -f /docker-action/Dockerfile -t helloworldimage
+      - run: docker build . -t helloworldimage -f docker-action/Dockerfile 
       - run: docker save $(docker images | grep helloworldimage | awk '{print $3}') helloworldimage:$(docker images | grep helloworldimage | awk '{print $2}') | gzip > helloworldimage.tar.gz
 
