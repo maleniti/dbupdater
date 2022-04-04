@@ -1,5 +1,17 @@
 #!/bin/bash
 
+if [ -z "${1}" ] || [ "${1}" = "--help" ]; then
+ echo "usage: ${0} [PATH] [--demo] [--full] mysql_params db_name"
+ echo
+ echo " PATH         - path containing .SQL upgrade files, '.' by default"
+ echo " --demo       - use additional .SQL scripts to fill db with demo data"
+ echo " --full       - execute all UP*.SQL scripts upto the latest version"
+ echo " mysql_params - parameters to connect to database, as given to mysql client"
+ echo " db_name      - name of the database to update"
+ echo
+ exit 0
+fi
+
 SQLPATH=
 if [[ -d ${1} ]]; then
  SQLPATH="${1}/"
@@ -12,11 +24,29 @@ if [ ${1} = "--demo" ]; then
  shift
 fi
 
-DB=${@: -1}
+FULL=0
+if [ ${1} = "--full" ]; then
+ FULL=1
+ shift
+fi
 
-VER=`mysql $@ -e "SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
-          IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
-             IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000', (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" | sed 's/ *$//'`
+DB=${@:$#}
+
+ERR=1
+while [[ $ERR -ne 0 ]]; do
+ mysql ${*%${!#}} -e "CREATE DATABASE IF NOT EXISTS ${DB};" 2> /dev/null
+ ERR=$?
+ if [[ ${ERR} -ne 0 ]]; then
+  SLEEPTIME=$[ ( ${RANDOM} % 10 ) + 5 ]s
+  echo "$0: Database not yet available; waiting ${SLEEPTIME}"
+  sleep ${SLEEPTIME}
+ fi
+done
+
+VER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
+                                            IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
+                                            IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000',
+                                                (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" 2> /dev/null | sed 's/ *$//'`
 
 VER=$(echo ${VER} | awk '{print $2}')
 
@@ -25,22 +55,39 @@ if [ -z "${VER}" ]; then
  NOVER=1
 fi
 
-VER="`printf %03d $((${VER} + 1))`"
+ERR=0
+F=fakefile.sql
+while [ ! -z ${F} ]; do
+ VER="`printf %03g $((10#${VER} + 1))`"
+ FILE="${SQLPATH}UP_${VER}_Version_"
+ FOUND=0
+ for F in `ls "${FILE}"* 2> /dev/null`; do
+  FOUND=1
+  if [ -z "${NOVER}" ]; then
+   mysql $@ < "${F}"
+   ERR=$?
+  else
+   mysql ${@:1:$#-1} < "${F}"
+   ERR=$?
+   unset NOVER
+  fi
+  if [ $ERR -eq 0 ]; then
+   echo "$0: Updated database '${DB}' to version ${VER}"
+  fi
+ done
 
-FILE="${SQLPATH}UP_${VER}_Version_"
-for F in `ls "${FILE}"*`; do
- if [ -z "${NOVER}" ]; then
-  mysql $@ < "${F}"
- else
-  mysql ${@:1:$#-1} < "${F}"
-  unset NOVER
+ if [ ${DEMO} -eq 1 ]; then
+  DEMOFILE="${SQLPATH}DEMOPUT_${VER}.SQL"
+  if [[ -f ${DEMOFILE} ]]; then
+   mysql $@ < "${DEMOFILE}"
+  fi
  fi
- echo "Updated database '${DB}' to version ${VER}"
+
+ if [ ${FOUND} -eq 0 ] || [ ${FULL} -eq 0 ] || [ ${ERR} -ne 0 ]; then
+  unset F
+ fi
 done
 
-if [ ${DEMO} -eq 1 ]; then
- DEMOFILE="${SQLPATH}DEMOPUT_${VER}.sql"
- if [[ -f ${DEMOFILE} ]]; then
-  mysql $@ < "${DEMOFILE}"
- fi
+if [ ${ERR} -ne 0 ]; then
+ echo "$0: There were errors in SQL scripts."
 fi

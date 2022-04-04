@@ -12,29 +12,52 @@ if [ ${1} = "--demo" ]; then
  shift
 fi
 
-DB=${@: -1}
+FULL=0
+if [ ${1} = "--full" ]; then
+ FULL=1
+ shift
+fi
 
-VER=`mysql $@ -e "SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
-          IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
-             IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000', (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" | sed 's/ *$//'`
+DB=${@:$#}
 
+VER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
+                                            IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
+                                            IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000',
+                                                (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" 2> /dev/null | sed 's/ *$//'`
 VER=$(echo ${VER} | awk '{print $2}')
-
 if [ -z "${VER}" ]; then
- VER="000"
+ echo "$0: Database and/or settings table don't exist or are malformed. Skipping downgrade."
+ exit 1
 fi
 
-VER="`printf %03d ${VER}`"
+MINVER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
+                                               IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
+                                               IF(((SELECT settingValue FROM setting WHERE settingName = 'minAllowedVersion') IS NULL), '${VER}',
+                                                   (SELECT settingValue FROM setting WHERE settingName = 'minAllowedVersion')), '${VER}'), '${VER}') Ver;" 2> /dev/null | sed 's/ *$//'`
+MINVER=$(echo ${MINVER} | awk '{print $2}')
+if [ -z "${MINVER}" ]; then
+ MINVER="${VER}"
+fi
 
-if [ ${DEMO} -eq 1 ]; then
- DEMOFILE="${SQLPATH}DEMODEL_${VER}.sql"
- if [[ -f ${DEMOFILE} ]]; then
-  mysql $@ < "${DEMOFILE}"
+KEEPON=1
+while [ "${VER}" -gt "${MINVER}" ] && [ "${KEEPON}" -eq 1 ]; do
+ if [ ${DEMO} -eq 1 ]; then
+  DEMOFILE="${SQLPATH}DEMODEL_${VER}.SQL"
+  if [[ -f ${DEMOFILE} ]]; then
+   mysql $@ < "${DEMOFILE}"
+  fi
  fi
-fi
+ 
+ FILE="${SQLPATH}DOWN_${VER}_Version_"
+ for F in `ls "${FILE}"*`; do
+  mysql $@ < "${F}"
+  echo "$0: Downgraded database '${DB}' from version ${VER}"
+ done
 
-FILE="${SQLPATH}DOWN_${VER}_Version_"
-for F in `ls "${FILE}"*`; do
- mysql $@ < "${F}"
- echo "Downgraded database '${DB}' from version ${VER}"
+ VER="`printf %03g $((10#${VER} - 1))`"
+
+ if [ "${FULL}" -ne 1 ]; then
+  KEEPON=0
+ fi
 done
+
