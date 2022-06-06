@@ -1,5 +1,17 @@
 #!/bin/bash
 
+if [ -z "${1}" ] || [ "${1}" = "--help" ]; then
+ echo "usage: ${0} [PATH] [--demo] [--full] mysql_params db_name"
+ echo
+ echo " PATH         - path containing .SQL upgrade files, '.' by default"
+ echo " --demo       - use additional .SQL scripts to fill db with demo data"
+ echo " --full       - execute all UP*.SQL scripts upto the latest version"
+ echo " mysql_params - parameters to connect to database, as given to mysql client"
+ echo " db_name      - name of the database to update"
+ echo
+ exit 0
+fi
+
 SQLPATH=
 if [[ -d ${1} ]]; then
  SQLPATH="${1}/"

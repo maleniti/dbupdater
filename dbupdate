@@ -80,6 +80,13 @@ while [ ! -z ${F} ]; do
   DEMOFILE="${SQLPATH}DEMOPUT_${VER}.SQL"
   if [[ -f ${DEMOFILE} ]]; then
    mysql $@ < "${DEMOFILE}"
+   if [ $? -eq 0 ]; then
+    echo "$0: Successfully applied demo script for version ${VER}."
+   else
+    echo "$0: Failed applying demo script for version ${VER}."
+   fi
+  else
+   echo "$0: There were no demo scripts for version ${VER}."
   fi
  fi
 
