@@ -1,16 +1,19 @@
 #!/bin/bash
 
 if [ -z "${1}" ] || [ "${1}" = "--help" ]; then
- echo "usage: ${0} [PATH] [--demo] [--full] mysql_params db_name"
+ echo "usage: ${0} [PATH] [--demo] [[--full]|[--ver XYZ]]? mysql_params db_name"
  echo
  echo " PATH         - path containing .SQL upgrade files, '.' by default"
- echo " --demo       - use additional .SQL scripts to fill db with demo data"
+ echo " --demo       - use additional .SQL scripts to delete demo data"
  echo " --full       - execute all UP*.SQL scripts upto the latest version"
+ echo " --ver XYZ    - downgrade to version specified by XYZ, can't combine with --full"
  echo " mysql_params - parameters to connect to database, as given to mysql client"
  echo " db_name      - name of the database to update"
  echo
  exit 0
 fi
+
+VERSION_LENGTH=3
 
 SQLPATH=
 if [[ -d ${1} ]]; then
@@ -30,6 +33,31 @@ if [ ${1} = "--full" ]; then
  shift
 fi
 
+TVER=""
+if [ ${1} = "--ver" ]; then
+ shift
+ TVER=${1}
+ ACTUAL_LENGTH=${#TVER}
+ if [ $ACTUAL_LENGTH -ne $VERSION_LENGTH ]; then
+  echo "${0}: invalid version: expecting three digits, zero-padded to the left"
+  exit 1
+ fi
+ if [[ ! ${TVER} =~ ^[0-9]+$ ]]; then
+  echo "${0}: invalid version: expecting three digits, zero-padded to the left"
+  exit 1
+ fi
+ shift
+fi
+
+if [[ $FULL -eq 1 ]] && [ ! $TVER = "" ]; then
+ echo "${0}: can't combine --full and --ver flags"
+ exit 1
+fi
+
+if [ ! ${TVER} = "" ]; then
+ FULL=1
+fi
+
 DB=${@:$#}
 
 VER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
@@ -42,6 +70,17 @@ if [ -z "${VER}" ]; then
  exit 1
 fi
 
+if [ "${TVER}" = "${VER}" ]; then
+ echo "${0}: database is already at version ${TVER}: nothing to do"
+ exit 0
+fi
+if [ ! "${TVER}" = "" ]; then
+ if [ "${TVER}" -gt "${VER}" ]; then
+  echo "${0}: specified --ver (${TVER}) is greater than database version (${VER}): exiting"
+  exit 1
+ fi
+fi
+
 MINVER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
                                                IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
                                                IF(((SELECT settingValue FROM setting WHERE settingName = 'minAllowedVersion') IS NULL), '${VER}',
@@ -51,8 +90,15 @@ if [ -z "${MINVER}" ]; then
  MINVER="${VER}"
 fi
 
+if [ ! "${TVER}" = "" ]; then
+ if [ "${TVER}" -lt "${MINVER}" ]; then
+  TVER=""
+  echo "${0}: minimum allowed version is ${MINVER}: ignoring --ver flag"
+ fi
+fi
+
 KEEPON=1
-while [ "${VER}" -gt "${MINVER}" ] && [ "${KEEPON}" -eq 1 ]; do
+while [ "${VER}" -gt "${MINVER}" ] && [ "${KEEPON}" -eq 1 ] && { [ "${TVER}" = "" ] || [ "${TVER}" -lt "${VER}" ]; } do
  if [ ${DEMO} -eq 1 ]; then
   DEMOFILE="${SQLPATH}DEMODEL_${VER}.SQL"
   if [[ -f ${DEMOFILE} ]]; then
@@ -72,4 +118,3 @@ while [ "${VER}" -gt "${MINVER}" ] && [ "${KEEPON}" -eq 1 ]; do
   KEEPON=0
  fi
 done
-
