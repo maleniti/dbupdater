@@ -120,7 +120,7 @@ while [ ! -z ${F} ] && { [ "${TVER}" = "" ] || [ "${TVER}" -gt "${VER}" ]; } do
  fi
 
  if [ ${DEMO} -eq 1 ] && [ ! -z ${F} ]; then
-  DEMOFILE="${SQLPATH}DEMOPUT_${VER}.SQL"
+  DEMOFILE="${SQLPATH}DEMOPUT_${VER}.sql"
   if [[ -f ${DEMOFILE} ]]; then
    mysql $@ < "${DEMOFILE}"
    if [ $? -eq 0 ]; then

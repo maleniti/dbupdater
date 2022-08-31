@@ -100,7 +100,7 @@ fi
 KEEPON=1
 while [ "${VER}" -gt "${MINVER}" ] && [ "${KEEPON}" -eq 1 ] && { [ "${TVER}" = "" ] || [ "${TVER}" -lt "${VER}" ]; } do
  if [ ${DEMO} -eq 1 ]; then
-  DEMOFILE="${SQLPATH}DEMODEL_${VER}.SQL"
+  DEMOFILE="${SQLPATH}DEMODEL_${VER}.sql"
   if [[ -f ${DEMOFILE} ]]; then
    mysql $@ < "${DEMOFILE}"
   fi
