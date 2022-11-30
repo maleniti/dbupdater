@@ -14,6 +14,7 @@ if [ -z "${1}" ] || [ "${1}" = "--help" ]; then
 fi
 
 VERSION_LENGTH=3
+BINPATH=$( dirname "${0}" )
 
 SQLPATH=
 if [[ -d ${1} ]]; then
@@ -83,6 +84,8 @@ if [ -z "${VER}" ]; then
  NOVER=1
 fi
 
+SVER=${VER}
+
 if [ "${TVER}" = "${VER}" ]; then
  echo "${0}: database is already at version ${TVER}: nothing to do"
  exit 0
@@ -133,7 +136,17 @@ while [ ! -z ${F} ] && { [ "${TVER}" = "" ] || [ "${TVER}" -gt "${VER}" ]; } do
 done
 
 if [ ${ERR} -ne 0 ]; then
- echo "$0: There were errors in SQL scripts."
+ echo "$0: There were errors in SQL scripts (version ${VER})."
+ NVER=`mysql ${*%${!#}} -e "USE ${DB}; SELECT IF(EXISTS(SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '${DB}'),
+                                              IF(EXISTS(SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '${DB}' AND TABLE_NAME = 'setting'),
+                                              IF(((SELECT settingValue FROM setting WHERE settingName = 'dbVersion') IS NULL), '000',
+                                                  (SELECT settingValue FROM setting WHERE settingName = 'dbVersion')), '000'), '000') Ver;" 2> /dev/null | sed 's/ *$//'`
+ 
+ NVER=$(echo ${NVER} | awk '{print $2}')
+ if [ "${SVER}" -lt "${VER}" ]; then
+  echo "${0}: attempting to run the downgrade script back to previous version"
+  "${BINPATH}/dbdowngrade" "${SQLPATH}" $@
+ fi
 fi
 
 if [ ! "${TVER}" = "" ]; then
